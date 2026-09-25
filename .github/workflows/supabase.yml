@@ -1,9 +1,9 @@
-name: Deploy Supabase schema and functions
+name: Deploy Supabase function
 on:
   push:
     branches: [main]
     paths:
-      - 'supabase/**'
+      - 'supabase/functions/**'
       - '.github/workflows/supabase.yml'
   workflow_dispatch:
 permissions:
@@ -11,24 +11,21 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
+      - name: Explain missing deployment secrets
+        if: ${{ env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == '' }}
+        run: echo "Add SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF in repository Actions secrets to enable automatic Edge Function deployment." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v4
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != '' }}
       - uses: supabase/setup-cli@v1
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != '' }}
         with:
           version: latest
-      - name: Link and deploy migrations
-        run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --linked --yes
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       - name: Deploy member management function
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != '' }}
         run: |
           supabase secrets set APP_ORIGIN=https://espoirpartage.github.io --project-ref "$SUPABASE_PROJECT_REF"
           supabase functions deploy manage-members --project-ref "$SUPABASE_PROJECT_REF"
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-
