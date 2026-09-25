@@ -42,7 +42,6 @@ Deno.serve(async (req) => {
       if (body.action === 'set_role' && !['membre','rh','direction','tresoriere'].includes(body.role)) return reply({ error: 'Rôle invalide.' }, 400);
       const { error } = await admin.from('profiles').update(patch).eq('user_id', userId);
       if (error) return reply({ error: error.message }, 400);
-      if (body.action === 'disable') await admin.auth.admin.signOut(userId, 'global');
       return reply({ ok: true });
     }
     return reply({ error: 'Action inconnue.' }, 400);
