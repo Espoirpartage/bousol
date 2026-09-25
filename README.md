@@ -22,7 +22,7 @@ Version hébergée : pages publiques GitHub Pages; comptes, profils et registre 
    ```
 
 4. Dans les clés API du projet, copiez l’URL du projet et la clé **publishable** dans `site/config.js`. Cette clé est conçue pour le navigateur et sera publique; elle n’autorise que les opérations permises par les règles RLS.
-5. Dans les secrets GitHub du dépôt (`Settings → Secrets and variables → Actions`), créez `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` et `SUPABASE_DB_PASSWORD`. Le workflow applique les migrations et déploie la fonction d’invitation à chaque mise à jour de `supabase/`.
+5. La migration initiale est déjà appliquée au projet Supabase. Pour activer le déploiement automatique des mises à jour de la fonction d’invitation depuis GitHub, ajoutez `SUPABASE_ACCESS_TOKEN` et `SUPABASE_PROJECT_REF` dans `Settings → Secrets and variables → Actions`. La migration initiale a été exécutée directement dans SQL Editor; elle ne doit pas être rejouée par `db push`.
 6. Dans les paramètres Auth de Supabase, désactivez l’inscription publique. Les nouveaux comptes doivent passer par le bouton **Inviter un membre**, qui envoie un lien par courriel.
 7. Activez GitHub Pages avec la source **GitHub Actions**. Le workflow `pages.yml` publie automatiquement `site/` après un push sur `main`.
 
@@ -30,13 +30,12 @@ Le service de courriel Supabase de test est limité. Configurez un SMTP de l’o
 
 ## GitHub Actions
 
-Le workflow de pages publie seulement le contenu de `site/`. Le workflow Supabase utilise trois *Actions secrets* :
+Le workflow de pages publie seulement le contenu de `site/`. Le workflow GitHub déploie la fonction Edge `manage-members` lorsque les deux *Actions secrets* ci-dessous sont présents. Les migrations de base de données ne sont pas rejouées par ce workflow, car la migration initiale a été appliquée directement dans le projet existant.
 
 - `SUPABASE_ACCESS_TOKEN` : jeton personnel Supabase;
-- `SUPABASE_PROJECT_REF` : identifiant du projet, visible dans son URL;
-- `SUPABASE_DB_PASSWORD` : mot de passe de la base.
+- `SUPABASE_PROJECT_REF` : identifiant du projet, visible dans son URL (`qcrsuqtylhntdcrzbtbh`).
 
-Ne publiez jamais ces valeurs dans le dépôt, dans `config.js` ou dans une capture d’écran. La clé `sb_publishable_…` est la seule valeur Supabase destinée au navigateur.
+Ne publiez jamais le jeton personnel dans le dépôt, dans `config.js` ou dans une capture d’écran. La clé `sb_publishable_…` est la seule clé destinée au navigateur.
 
 ## Accès de l’application
 
