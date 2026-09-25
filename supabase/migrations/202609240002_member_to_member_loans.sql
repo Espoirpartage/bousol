@@ -54,18 +54,8 @@ begin
     if not found then raise exception 'Emprunteur actif introuvable.'; end if;
     select * into v_lender from public.profiles where user_id=p_lender_id and active for update;
     if not found then raise exception 'Prêteur actif introuvable.'; end if;
-    select coalesce(sum(case
-      when l.type='pret' then -l.amount_gdes
-      when l.type='remboursement' then l.amount_gdes
-      else l.amount_gdes
-    end),0)::bigint into v_available
-    from public.ledger l
-    where l.status='confirme' and (
-      (l.member_id=v_lender.user_id and l.type not in ('pret','remboursement'))
-      or (l.member_id=v_lender.user_id and l.type in ('pret','remboursement'))
-      or l.lender_member_id=v_lender.user_id
-    );
-    -- Recalcul avec les deux rôles : emprunteur et prêteur réduisent le solde;
+    if v_borrower.role<>'membre' or v_lender.role<>'membre' then raise exception 'Les prêts sont réservés aux membres.'; end if;
+    -- Les prêts débitent les deux parties; remboursements les recréditent.
     -- remboursements confirmés le rétablissent.
     select coalesce(sum(case
       when l.type in ('pret','remboursement') then
@@ -97,6 +87,7 @@ begin
     if not found then raise exception 'Emprunteur actif introuvable.'; end if;
     select * into v_lender from public.profiles where user_id=p_lender_id and active for update;
     if not found then raise exception 'Prêteur actif introuvable.'; end if;
+    if v_borrower.role<>'membre' or v_lender.role<>'membre' then raise exception 'Les remboursements concernent les membres uniquement.'; end if;
     select coalesce(sum(case when type='pret' then amount_gdes else -amount_gdes end),0)::bigint into v_owed
     from public.ledger
     where status='confirme' and member_id=v_borrower.user_id and lender_member_id=v_lender.user_id
@@ -168,9 +159,9 @@ begin
   select role into v_role from public.profiles where user_id=v_user and active;
   if v_role is null then raise exception 'Connexion requise.'; end if;
   select jsonb_build_object(
-    'fund_available',coalesce(sum(l.amount_gdes) filter(where l.status='confirme' and l.type in ('cotisation','don','autre')),0),
-    'monthly_contributions',coalesce(sum(l.amount_gdes) filter(where l.status='confirme' and l.type='cotisation' and l.created_at>=date_trunc('month',now())),0),
-    'loans_outstanding',greatest(coalesce((select sum(case when x.type='pret' then x.amount_gdes else -x.amount_gdes end) from public.ledger x where x.status='confirme' and x.type in ('pret','remboursement')),0),0),
+    'fund_available',case when v_role in ('tresoriere','rh','direction') then coalesce((select sum(l.amount_gdes) from public.ledger l where l.status='confirme' and l.type in ('cotisation','don','autre')),0) else 0 end,
+    'monthly_contributions',case when v_role in ('tresoriere','rh','direction') then coalesce((select sum(l.amount_gdes) from public.ledger l where l.status='confirme' and l.type='cotisation' and l.created_at>=date_trunc('month',now())),0) else 0 end,
+    'loans_outstanding',case when v_role in ('tresoriere','rh','direction') then greatest(coalesce((select sum(case when x.type='pret' then x.amount_gdes else -x.amount_gdes end) from public.ledger x where x.status='confirme' and x.type in ('pret','remboursement')),0),0) else 0 end,
     'active_members',case when v_role in ('tresoriere','rh','direction') then (select count(*) from public.profiles where role='membre' and active) else 0 end,
     'pending_operations',(select count(*) from public.ledger where status='en_attente' and (v_role in ('tresoriere','direction') or created_by=v_user)),
     'my_balance',coalesce((select sum(case
@@ -180,7 +171,7 @@ begin
       from public.ledger l where l.status='confirme' and
       (l.member_id=v_user or l.lender_member_id=v_user)),0),
     'my_pending',(select count(*) from public.ledger where status='en_attente' and created_by=v_user)
-  ) into v from public.ledger l where l.status='confirme' or l.id is null;
+  ) into v;
   return coalesce(v,jsonb_build_object('fund_available',0,'monthly_contributions',0,'loans_outstanding',0,'active_members',0,'pending_operations',0,'my_balance',0,'my_pending',0));
 end;
 $$;
@@ -203,7 +194,7 @@ $$;
 create or replace function public.loan_members() returns table(user_id uuid,full_name text)
 language sql stable security definer set search_path = '' as $$
   select p.user_id,p.full_name from public.profiles p
-  where p.active and p.role='membre' and p.user_id<>(select auth.uid())
+  where (select public.current_role()) is not null and p.active and p.role='membre' and p.user_id<>(select auth.uid())
   order by p.full_name;
 $$;
 
@@ -214,7 +205,7 @@ language sql stable security definer set search_path = '' as $$
      from public.ledger l where l.status='confirme' and l.member_id=(select auth.uid())
        and l.lender_member_id=p.user_id and l.type in ('pret','remboursement'))
   from public.profiles p
-  where exists(select 1 from public.ledger l where l.status='confirme' and l.member_id=(select auth.uid())
+  where (select public.current_role()) is not null and exists(select 1 from public.ledger l where l.status='confirme' and l.member_id=(select auth.uid())
     and l.lender_member_id=p.user_id and l.type='pret')
   order by p.full_name;
 $$;
