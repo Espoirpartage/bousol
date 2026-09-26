@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   if (authError || !user) return reply({ error: 'Connexion requise.' }, 401);
   const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: profile } = await admin.from('profiles').select('role,active').eq('user_id', user.id).maybeSingle();
-  if (!profile?.active || !['tresoriere', 'tresoriere_adjointe', 'direction', 'vice_president'].includes(profile.role)) return reply({ error: 'Accès réservé à la trésorière et à la direction.' }, 403);
+  if (!profile?.active || !['tresoriere', 'tresoriere_adjointe', 'rh', 'direction', 'vice_president'].includes(profile.role)) return reply({ error: 'Accès réservé à la trésorière et à la direction.' }, 403);
   try {
     const body = await req.json();
     if (body.action === 'invite') {
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       if (!/^\S+@\S+\.\S+$/.test(email) || !fullName || fullName.length > 120 || !['membre','rh','direction','vice_president','tresoriere','tresoriere_adjointe'].includes(role)) return reply({ error: 'Nom, courriel et rôle valides requis.' }, 400);
       const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: fullName }, redirectTo: body.redirectTo });
       if (error || !data.user) return reply({ error: error?.message ?? 'Invitation impossible.' }, 400);
-      const { error: updateError } = await admin.from('profiles').update({ full_name: fullName, role, active: true }).eq('user_id', data.user.id);
+      const { error: updateError } = await admin.from('profiles').update({ full_name: fullName, role, active: true, position_title: String(body.positionTitle ?? '').trim() || null }).eq('user_id', data.user.id);
       if (updateError) return reply({ error: updateError.message }, 500);
       return reply({ ok: true, userId: data.user.id }, 201);
     }
